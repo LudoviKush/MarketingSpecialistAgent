@@ -1,23 +1,18 @@
 import os
-from flask import Flask, request, jsonify
+import logging
+from flask import Flask, request, jsonify, send_from_directory
 import vertexai
 from vertexai.generative_models import GenerativeModel, SafetySetting, Part
 from google.cloud import storage
 from google.oauth2 import service_account
 from flask_cors import CORS
-import os
-from flask import send_from_directory
 
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    if path != "" and os.path.exists(os.path.join('marketing-agent-fe', 'dist', path)):
-        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), path)
-    else:
-        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), 'index.html')
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+app.logger.setLevel(logging.DEBUG)
 
 # Set up credentials using the service account JSON file
 credentials_path = os.path.join(os.path.dirname(__file__), "tr-media-analysis-be9da703ffec.json")
@@ -108,12 +103,14 @@ def initialize_chat():
     vertexai.init(project="tr-media-analysis", location="europe-central2", credentials=credentials)
     model = GenerativeModel("gemini-1.5-pro-002")
     chat_session = model.start_chat()
+    app.logger.debug("Chat session initialized")
 
 def analyze_video(video_uri, platform):
     global chat_session
     if chat_session is None:
         initialize_chat()
     
+    app.logger.debug(f"Analyzing video: {video_uri} for platform: {platform}")
     video_part = Part.from_uri(
         mime_type="video/mp4",
         uri=video_uri,
@@ -124,30 +121,45 @@ def analyze_video(video_uri, platform):
         generation_config=generation_config,
         safety_settings=safety_settings
     )
+    app.logger.debug("Video analysis completed")
     return response.text
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     global chat_session
     try:
+        app.logger.debug("Analyze route called")
         if 'video' in request.files:
             video_file = request.files['video']
             if video_file.filename == '':
+                app.logger.warning("No video file selected")
                 return jsonify({"error": "No video file selected"}), 400
             
             platform = request.form.get('platform', 'tiktok')
             if platform not in ['tiktok', 'linkedin']:
+                app.logger.warning(f"Invalid platform selected: {platform}")
                 return jsonify({"error": "Invalid platform selected"}), 400
             
-            # Save the video to Google Cloud Storage
-            blob = bucket.blob(video_file.filename)
-            blob.upload_from_string(
-                video_file.read(),
-                content_type=video_file.content_type
-            )
+            # Check file size
+            video_file.seek(0, os.SEEK_END)
+            file_size = video_file.tell()
+            video_file.seek(0)
+            
+            if file_size > 2 * 1024 * 1024:  # 2 MB
+                app.logger.info(f"Uploading large file ({file_size} bytes) to bucket")
+                blob = bucket.blob(video_file.filename)
+                blob.upload_from_file(video_file)
+            else:
+                app.logger.info(f"Processing small file ({file_size} bytes) in memory")
+                blob = bucket.blob(video_file.filename)
+                blob.upload_from_string(
+                    video_file.read(),
+                    content_type=video_file.content_type
+                )
             
             # Generate the GCS URI for the uploaded video
             video_uri = f"gs://{bucket_name}/{video_file.filename}"
+            app.logger.debug(f"Video uploaded to: {video_uri}")
             
             # Analyze the video
             analysis_result = analyze_video(video_uri, platform)
@@ -155,17 +167,28 @@ def analyze():
         
         elif 'message' in request.json:
             message = request.json['message']
+            app.logger.debug(f"Processing chat message: {message}")
             if chat_session is None:
                 initialize_chat()
             response = chat_session.send_message(message)
             return jsonify({"reply": response.text})
         
         else:
+            app.logger.warning("No video file or message provided")
             return jsonify({"error": "No video file or message provided"}), 400
     
     except Exception as e:
-        app.logger.error(f"An error occurred: {str(e)}")
+        app.logger.error(f"An error occurred: {str(e)}", exc_info=True)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    app.logger.debug(f"Serving path: {path}")
+    if path != "" and os.path.exists(os.path.join('marketing-agent-fe', 'dist', path)):
+        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), path)
+    else:
+        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

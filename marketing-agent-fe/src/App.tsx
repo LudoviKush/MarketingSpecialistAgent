@@ -54,7 +54,7 @@ function App() {
     formData.append('platform', platform);
   
     try {
-      const response = await axios.post('/api/analyze', formData, {
+      const response = await axios.post('http://127.0.0.1:5000/api/analyze', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -83,7 +83,7 @@ function App() {
       setIsLoading(true);
 
       try {
-        const response = await axios.post('/api/analyze', { message: inputMessage });
+        const response = await axios.post('http://127.0.0.1:5000/api/analyze', { message: inputMessage });
         setMessages(prevMessages => [...prevMessages, { text: response.data.reply, sender: 'bot' }]);
       } catch (error) {
         console.error('Error sending message:', error);
