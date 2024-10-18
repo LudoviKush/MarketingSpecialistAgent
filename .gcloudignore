@@ -1,0 +1,21 @@
+# Exclude node_modules in any subdirectory
+**/node_modules/
+
+# Exclude all .md files
+*.md
+
+# Exclude git related files
+.git
+.gitignore
+
+# Exclude log files
+*.log
+
+# Exclude the entire marketing-agent-fe directory except the dist folder
+marketing-agent-fe/*
+!marketing-agent-fe/dist/
+
+# Exclude any Python virtual environment
+venv/
+*.pyc
+__pycache__/

@@ -1,6 +1,13 @@
 runtime: python39
+service: marketing-agent
 
 entrypoint: gunicorn -b :$PORT main:app
+
+instance_class: F1
+
+automatic_scaling:
+  min_instances: 0
+  max_instances: 10
 
 handlers:
 - url: /api/.*
@@ -11,8 +18,7 @@ handlers:
   upload: marketing-agent-fe/dist/.*\.(json|ico|js|css|png|jpg|jpeg|gif|woff|woff2|ttf|svg)$
 
 - url: /.*
-  static_files: marketing-agent-fe/dist/index.html
-  upload: marketing-agent-fe/dist/index.html
+  script: auto
 
 env_variables:
   GOOGLE_APPLICATION_CREDENTIALS: "tr-media-analysis-be9da703ffec.json"

@@ -1,0 +1,6 @@
+Flask
+flask-cors
+google-cloud-storage
+google-auth
+vertexai
+gunicorn

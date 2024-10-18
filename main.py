@@ -5,9 +5,19 @@ from vertexai.generative_models import GenerativeModel, SafetySetting, Part
 from google.cloud import storage
 from google.oauth2 import service_account
 from flask_cors import CORS
+import os
+from flask import send_from_directory
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(os.path.join('marketing-agent-fe', 'dist', path)):
+        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), path)
+    else:
+        return send_from_directory(os.path.join('marketing-agent-fe', 'dist'), 'index.html')
 
 # Set up credentials using the service account JSON file
 credentials_path = os.path.join(os.path.dirname(__file__), "tr-media-analysis-be9da703ffec.json")
