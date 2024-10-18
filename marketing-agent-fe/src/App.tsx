@@ -16,6 +16,7 @@ import {
 import { CloudUpload, Send } from "@mui/icons-material";
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
+import jsPDF from 'jspdf';
 import './App.css';
 
 function App() {
@@ -46,19 +47,19 @@ function App() {
       alert('Please select a file first!');
       return;
     }
-
+  
     setIsLoading(true);
     const formData = new FormData();
     formData.append('video', file);
     formData.append('platform', platform);
-
+  
     try {
-      const response = await axios.post('http://127.0.0.1:5000/analyze', formData, {
+      const response = await axios.post('http://127.0.0.1:5000/api/analyze', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
+  
       setMessages([
         ...messages,
         { text: 'Video uploaded and analyzed', sender: 'user' },
@@ -66,7 +67,11 @@ function App() {
       ]);
     } catch (error) {
       console.error('Error uploading file:', error);
-      setMessages([...messages, { text: 'Error uploading and analyzing video', sender: 'bot' }]);
+      let errorMessage = 'Error uploading and analyzing video';
+      if (axios.isAxiosError(error) && error.response) {
+        errorMessage = `Error: ${error.response.data.error || error.message}`;
+      }
+      setMessages([...messages, { text: errorMessage, sender: 'bot' }]);
     }
     setIsLoading(false);
   };
@@ -78,7 +83,7 @@ function App() {
       setIsLoading(true);
 
       try {
-        const response = await axios.post('http://127.0.0.1:5000/chat', { message: inputMessage });
+        const response = await axios.post('http://127.0.0.1:5000/api/analyze', { message: inputMessage });
         setMessages(prevMessages => [...prevMessages, { text: response.data.reply, sender: 'bot' }]);
       } catch (error) {
         console.error('Error sending message:', error);
@@ -87,6 +92,33 @@ function App() {
 
       setIsLoading(false);
     }
+  };
+
+  const handleKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      handleSendMessage();
+    }
+  };
+
+  const saveChatAsPDF = () => {
+    const pdf = new jsPDF();
+    let yOffset = 10;
+
+    messages.forEach((message, index) => {
+      const sender = message.sender === 'user' ? 'You' : 'Bot';
+      const text = `${sender}: ${message.text}`;
+      const lines = pdf.splitTextToSize(text, 180);
+
+      if (yOffset + lines.length * 7 > 280) {
+        pdf.addPage();
+        yOffset = 10;
+      }
+
+      pdf.text(lines, 10, yOffset);
+      yOffset += lines.length * 7 + 5;
+    });
+
+    pdf.save('chat_conversation.pdf');
   };
 
   return (
@@ -141,6 +173,14 @@ function App() {
             UPLOAD AND ANALYZE
           </Button>
           {isLoading && <CircularProgress className="loading-indicator" />}
+          <Button
+          variant="contained"
+          color="secondary"
+          onClick={saveChatAsPDF}
+          className="save-pdf-button"
+        >
+          Save as PDF
+        </Button>
         </Box>
         <Box className="chat-area">
           <List>
@@ -149,7 +189,9 @@ function App() {
                 <ListItemText
                   primary={message.sender === 'user' ? 'You' : 'Bot'}
                   secondary={
-                    <ReactMarkdown>
+                    <ReactMarkdown components={{
+                      p: ({ node, ...props }) => <span {...props} />
+                    }}>
                       {message.text}
                     </ReactMarkdown>
                   }
@@ -166,6 +208,7 @@ function App() {
             placeholder="Type a message..."
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
             className="message-input"
           />
           <Button

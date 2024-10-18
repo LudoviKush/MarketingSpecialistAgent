@@ -1,0 +1,18 @@
+runtime: python39
+
+entrypoint: gunicorn -b :$PORT main:app
+
+handlers:
+- url: /api/.*
+  script: auto
+
+- url: /(.*\.(json|ico|js|css|png|jpg|jpeg|gif|woff|woff2|ttf|svg))$
+  static_files: marketing-agent-fe/dist/\1
+  upload: marketing-agent-fe/dist/.*\.(json|ico|js|css|png|jpg|jpeg|gif|woff|woff2|ttf|svg)$
+
+- url: /.*
+  static_files: marketing-agent-fe/dist/index.html
+  upload: marketing-agent-fe/dist/index.html
+
+env_variables:
+  GOOGLE_APPLICATION_CREDENTIALS: "tr-media-analysis-be9da703ffec.json"
